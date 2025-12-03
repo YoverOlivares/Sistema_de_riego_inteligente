@@ -29,6 +29,10 @@ void setup() {
     bomba.init();
     logger.init();
 
+    // --- ESTA LÍNEA ES CRÍTICA ---
+    cerebro.init(); 
+    // -----------------------------
+
     Serial.println(">>> Sistema listo y esperando ciclo...");
 }
 
@@ -51,7 +55,7 @@ void loop() {
     logger.guardarLectura(ctx); 
 
     // 5. Actuación (Capa Hardware)
-    if (ctx.tiempoRiegoCalculado > 0) {
+    if (ctx.tiempoRiegoCalculado > 1.0) {
         bomba.activar(ctx.tiempoRiegoCalculado);
         Serial.println(" -> Ciclo de riego finalizado.");
     } else {
