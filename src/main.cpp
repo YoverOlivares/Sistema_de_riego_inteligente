@@ -10,6 +10,7 @@
 #define PIN_DHT 15
 #define PIN_SUELO 34
 #define PIN_RELE 26
+#define PIN_LED 2
 
 // --- Inyección de Dependencias (Instanciación) ---
 SensorManager sensores(PIN_SUELO, PIN_DHT);
@@ -34,6 +35,9 @@ void setup() {
     // -----------------------------
 
     Serial.println(">>> Sistema listo y esperando ciclo...");
+
+    pinMode(PIN_LED, OUTPUT);
+    digitalWrite(PIN_LED, LOW);
 }
 
 void loop() {
@@ -56,11 +60,12 @@ void loop() {
 
     // 5. Actuación (Capa Hardware)
     if (ctx.tiempoRiegoCalculado > 1.0) {
-        bomba.activar(ctx.tiempoRiegoCalculado);
-        Serial.println(" -> Ciclo de riego finalizado.");
+    digitalWrite(PIN_LED, HIGH);  // LED enciende
+    bomba.activar(ctx.tiempoRiegoCalculado);
+    digitalWrite(PIN_LED, LOW);   // LED apaga
+    Serial.println(" -> Ciclo de riego finalizado.");
     } else {
-        // Opcional: Feedback visual de "No Riego"
-        // Serial.println(" -> Condiciones óptimas. No se requiere riego.");
+    digitalWrite(PIN_LED, LOW);
     }
 
     // 6. Espera (Intervalo de Muestreo)

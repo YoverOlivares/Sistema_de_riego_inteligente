@@ -7,7 +7,7 @@
 #define N_INPUTS 3    
 #define N_OUTPUTS 1   
 // CAMBIO IMPORTANTE: Subimos de 4KB a 12KB para evitar el desbordamiento
-#define TENSOR_ARENA_SIZE 30 * 1024 
+# define TENSOR_ARENA_SIZE 10 * 1024 
 
 class IrrigationBrain {
   public:
