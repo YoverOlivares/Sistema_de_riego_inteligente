@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EcoRiego AI — Visualizador 3D del Sistema</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;500;600;700;800;900&display=swap');
+
+  :root {
+    --green: #00ffa3;
+    --green-glow: rgba(0, 255, 163, 0.4);
+    --blue: #00b8ff;
+    --orange: #ff9100;
+    --red: #ff3366;
+    --yellow: #ffea00;
+    --dark: #030712;
+    --panel-bg: rgba(10, 15, 26, 0.65);
+    --panel-border: rgba(255, 255, 255, 0.08);
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--dark);
+    font-family: 'Exo 2', sans-serif;
+    overflow: hidden;
+    color: var(--text-main);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #canvas-container {
+    position: fixed; inset: 0; z-index: 1;
+  }
+  canvas { display: block; outline: none; }
+
+  /* OVERLAYS & GLASSMORPHISM */
+  .glass-panel {
+    background: var(--panel-bg);
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+    border: 1px solid var(--panel-border);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
+  /* HEADER */
+  #header {
+    position: fixed; top: 20px; left: 24px; right: 24px; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    pointer-events: none; /* Let clicks pass through empty space */
+  }
+
+  .header-left {
+    display: flex; align-items: center; gap: 16px;
+    padding: 12px 24px; border-radius: 16px;
+    pointer-events: auto;
+  }
+
+  .logo-icon {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, rgba(0,255,163,0.2), rgba(0,184,255,0.2));
+    border: 1px solid rgba(0,255,163,0.3);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 0 20px var(--green-glow);
+  }
+
+  #header h1 {
+    font-size: 22px; font-weight: 800; letter-spacing: 1.5px;
+    background: linear-gradient(to right, #fff, var(--green), var(--blue));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 2px;
+  }
+
+  #header .subtitle {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; color: var(--text-muted);
+    letter-spacing: 1.5px; text-transform: uppercase;
+  }
+
+  .controls-hint {
+    padding: 12px 20px; border-radius: 12px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; color: var(--text-muted);
+    text-align: right; line-height: 1.6;
+    pointer-events: auto;
+  }
+  .controls-hint span { color: var(--green); font-weight: bold; }
+
+  /* INFO PANEL */
+  #info-panel {
+    position: fixed; right: 24px; top: 50%; transform: translateY(-50%) translateX(40px);
+    width: 340px; z-index: 200;
+    border-radius: 20px;
+    padding: 28px;
+    opacity: 0; pointer-events: none;
+    transition: all 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+  }
+
+  #info-panel.visible {
+    opacity: 1; pointer-events: all;
+    transform: translateY(-50%) translateX(0);
+  }
+
+  .panel-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .component-icon {
+    font-size: 36px; margin-bottom: 8px;
+    filter: drop-shadow(0 0 10px rgba(255,255,255,0.2));
+  }
+
+  .component-name {
+    font-size: 20px; font-weight: 700; letter-spacing: 0.5px;
+    color: #fff;
+  }
+
+  .component-tag {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px; color: var(--green);
+    letter-spacing: 2px; text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  .close-btn {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text-muted); cursor: pointer;
+    border-radius: 8px; width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; transition: all 0.2s;
+  }
+  .close-btn:hover { background: rgba(255,255,255,0.15); color: #fff; transform: scale(1.05); }
+
+  .divider {
+    height: 1px; width: 100%;
+    background: linear-gradient(90deg, rgba(0,255,163,0.5), transparent);
+    margin: 20px 0;
+  }
+
+  .spec-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 12px; margin-bottom: 20px;
+  }
+
+  .spec-item {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255,255,255,0.03);
+    border-radius: 10px; padding: 10px 12px;
+    transition: background 0.3s;
+  }
+  .spec-item:hover { background: rgba(0, 255, 163, 0.05); }
+
+  .spec-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;
+  }
+
+  .spec-value {
+    font-size: 13px; font-weight: 600; color: #fff;
+  }
+
+  .description {
+    font-size: 13px; color: var(--text-muted);
+    line-height: 1.6; font-weight: 400;
+  }
+
+  .status-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px; border-radius: 20px;
+    font-size: 11px; font-weight: 700; margin-top: 20px;
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+  .status-badge.active { background: rgba(0,255,163,0.1); color: var(--green); border: 1px solid rgba(0,255,163,0.2); }
+  .status-badge.pending { background: rgba(255,145,0,0.1); color: var(--orange); border: 1px solid rgba(255,145,0,0.2); }
+  .status-badge.planned { background: rgba(0,184,255,0.1); color: var(--blue); border: 1px solid rgba(0,184,255,0.2); }
+
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .status-badge.active .status-dot { background: var(--green); box-shadow: 0 0 10px var(--green); animation: pulse 2s infinite; }
+  .status-badge.pending .status-dot { background: var(--orange); box-shadow: 0 0 10px var(--orange); }
+  .status-badge.planned .status-dot { background: var(--blue); }
+
+  @keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.4; }
+    100% { opacity: 1; }
+  }
+
+  /* LEGEND */
+  #legend {
+    position: fixed; left: 24px; bottom: 24px; z-index: 100;
+    border-radius: 16px; padding: 20px;
+  }
+
+  #legend h3 {
+    font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--text-muted); margin-bottom: 14px;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  .legend-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: x; row-gap: 12px; column-gap: 20px;
+  }
+
+  .legend-item {
+    display: flex; align-items: center; gap: 10px;
+    cursor: pointer; transition: opacity 0.2s;
+  }
+  .legend-item:hover { opacity: 0.7; }
+
+  .legend-dot {
+    width: 12px; height: 12px; border-radius: 3px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
+  }
+
+  .legend-label { font-size: 12px; color: var(--text-main); font-weight: 500; }
+
+  /* TOOLTIP */
+  #tooltip {
+    position: fixed; z-index: 300; pointer-events: none;
+    background: rgba(3, 7, 18, 0.85);
+    border: 1px solid var(--green);
+    border-radius: 8px; padding: 8px 16px;
+    font-size: 13px; font-weight: 700; letter-spacing: 0.5px;
+    color: var(--green);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 0 15px rgba(0,255,163,0.15);
+    transition: opacity 0.2s, transform 0.1s;
+    opacity: 0; transform: scale(0.95);
+    white-space: nowrap;
+  }
+  #tooltip.visible { opacity: 1; transform: scale(1); }
+
+  /* STATS BAR */
+  #stats-bar {
+    position: fixed; left: 24px; top: 110px; z-index: 100;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+
+  .stat-card {
+    border-radius: 14px; padding: 14px 20px;
+    min-width: 180px;
+    position: relative; overflow: hidden;
+  }
+  
+  .stat-card::before {
+    content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%;
+    background: var(--green);
+    box-shadow: 0 0 10px var(--green);
+  }
+
+  .stat-card:nth-child(2)::before { background: var(--blue); box-shadow: 0 0 10px var(--blue); }
+  .stat-card:nth-child(3)::before { background: var(--orange); box-shadow: 0 0 10px var(--orange); }
+
+  .s-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 1.5px;
+  }
+
+  .s-value {
+    font-size: 26px; font-weight: 800; margin-top: 4px;
+    color: #fff; font-family: 'Share Tech Mono', monospace;
+  }
+
+  .s-unit {
+    font-size: 12px; color: var(--text-muted); font-weight: 500;
+  }
+
+  /* LOADING */
+  #loading {
+    position: fixed; inset: 0; z-index: 500;
+    background: var(--dark);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 24px;
+    transition: opacity 1s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .loader-core {
+    width: 80px; height: 80px; position: relative;
+  }
+  
+  .loader-ring {
+    position: absolute; inset: 0;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    border-top-color: var(--green);
+    border-bottom-color: var(--blue);
+    animation: spin 1.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+  }
+  .loader-ring:nth-child(2) {
+    inset: 10px; border-top-color: var(--blue); border-bottom-color: var(--green);
+    animation: spin-reverse 2s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes spin-reverse { to { transform: rotate(-360deg); } }
+
+  .loader-text {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px; color: var(--green);
+    letter-spacing: 4px; text-shadow: 0 0 10px var(--green-glow);
+    animation: blink 1.5s infinite;
+  }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="loader-core">
+    <div class="loader-ring"></div>
+    <div class="loader-ring"></div>
+  </div>
+  <div class="loader-text">INICIALIZANDO SISTEMA 3D...</div>
+</div>
+
+<div id="canvas-container"></div>
+
+<!-- HEADER -->
+<div id="header">
+  <div class="header-left glass-panel">
+    <div class="logo-icon">🌿</div>
+    <div>
+      <h1>ECORIEGO AI</h1>
+      <div class="subtitle">SISTEMA DE RIEGO AUTÓNOMO · TinyML · ESP32 · UNC CAJAMARCA 2026</div>
+    </div>
+  </div>
+  <div class="controls-hint glass-panel">
+    <span>🖱 Izquierdo:</span> Rotar &nbsp;|&nbsp; <span>🖱 Derecho:</span> Mover &nbsp;|&nbsp; <span>Scroll:</span> Zoom<br>
+    <span>🖱 Clic:</span> Ver información del componente
+  </div>
+</div>
+
+<!-- STATS -->
+<div id="stats-bar">
+  <div class="stat-card glass-panel">
+    <div class="s-label">Modelo TFLite</div>
+    <div class="s-value">2856 <span class="s-unit">bytes</span></div>
+  </div>
+  <div class="stat-card glass-panel">
+    <div class="s-label">Inferencia</div>
+    <div class="s-value">&lt;5 <span class="s-unit">ms</span></div>
+  </div>
+  <div class="stat-card glass-panel">
+    <div class="s-label">RAM usada</div>
+    <div class="s-value">10 <span class="s-unit">KB</span></div>
+  </div>
+</div>
+
+<!-- INFO PANEL -->
+<div id="info-panel" class="glass-panel">
+  <div class="panel-header">
+    <div>
+      <div class="component-icon" id="panel-icon">📟</div>
+      <div class="component-name" id="panel-name">Componente</div>
+      <div class="component-tag" id="panel-tag">TAG</div>
+    </div>
+    <button class="close-btn" onclick="closePanel()">✕</button>
+  </div>
+  <div class="divider"></div>
+  <div class="spec-grid" id="panel-specs"></div>
+  <div class="description" id="panel-desc"></div>
+  <div id="panel-status"></div>
+</div>
+
+<!-- TOOLTIP -->
+<div id="tooltip"></div>
+
+<!-- LEGEND -->
+<div id="legend" class="glass-panel">
+  <h3>Componentes de Hardware</h3>
+  <div class="legend-grid">
+    <div class="legend-item"><div class="legend-dot" style="background:#00b8ff"></div><div class="legend-label">Procesamiento</div></div>
+    <div class="legend-item"><div class="legend-dot" style="background:#00ffa3"></div><div class="legend-label">Sensores</div></div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ff9100"></div><div class="legend-label">Actuadores</div></div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ffea00"></div><div class="legend-label">Alimentación</div></div>
+    <div class="legend-item"><div class="legend-dot" style="background:#9d4edd"></div><div class="legend-label">Conectividad</div></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- Integramos OrbitControls para un control fluido y profesional -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+// ===================== DATA (Intacta) =====================
+const COMPONENTS = {
+  esp32: {
+    name: "ESP32 Dev Kit V1",
+    tag: "UNIDAD CENTRAL DE PROCESAMIENTO",
+    icon: "🧠",
+    color: 0x0088ff,
+    emissive: 0x002266,
+    specs: [
+      { label: "CPU", value: "Dual-Core 240MHz" },
+      { label: "RAM", value: "520 KB SRAM" },
+      { label: "Flash", value: "4 MB" },
+      { label: "GPIO", value: "D2, D15, D26, D34" },
+    ],
+    description: "Microcontrolador principal que ejecuta el firmware EcoRiego AI con Clean Architecture. Corre el modelo TFLite offline mediante EloquentTinyML. Coordina todos los módulos del sistema.",
+    status: "active",
+    statusText: "Operativo"
+  },
+  fc28: {
+    name: "Sensor FC-28",
+    tag: "SENSOR DE HUMEDAD DE SUELO",
+    icon: "🌱",
+    color: 0x00ffa3,
+    emissive: 0x003322,
+    specs: [
+      { label: "Pin", value: "GPIO 34 (ADC1)" },
+      { label: "Rango", value: "0–100% HR" },
+      { label: "Señal", value: "Analógica 0–3.3V" },
+      { label: "Tipo", value: "Resistivo" },
+    ],
+    description: "Mide la humedad del suelo generando una señal analógica de 0 a 4095 unidades digitales (ADC). El valor se mapea a porcentaje 0–100%. Para producción a largo plazo se recomienda reemplazar por sensor capacitivo v1.2.",
+    status: "active",
+    statusText: "Activo en campo"
+  },
+  dht22: {
+    name: "DHT22",
+    tag: "SENSOR TEMPERATURA Y HUMEDAD AIRE",
+    icon: "🌡️",
+    color: 0x00ffa3,
+    emissive: 0x003322,
+    specs: [
+      { label: "Pin", value: "GPIO 15" },
+      { label: "Protocolo", value: "1-Wire (Single)" },
+      { label: "Precisión T°", value: "±0.5°C" },
+      { label: "Precisión HR", value: "±2–5%" },
+    ],
+    description: "Mide temperatura del aire y humedad relativa. Es una de las 3 variables de entrada del modelo neuronal junto con la humedad del suelo. Crucial para detectar condiciones de niebla/helada y evitar riego innecesario.",
+    status: "active",
+    statusText: "Activo"
+  },
+  relay: {
+    name: "Módulo Relé 5V",
+    tag: "ACTUADOR — CONTROL DE BOMBA",
+    icon: "⚡",
+    color: 0xff9100,
+    emissive: 0x442200,
+    specs: [
+      { label: "Pin Control", value: "GPIO 26 (OUTPUT)" },
+      { label: "Alimentación", value: "VIN (5V)" },
+      { label: "Capacidad", value: "10A / 250VAC" },
+      { label: "Aislamiento", value: "Óptico" },
+    ],
+    description: "Interfaz de potencia entre el ESP32 (3.3V lógica) y la bomba de agua (6V/batería). Se activa cuando la predicción del modelo neuronal supera el umbral de 1 minuto. Conectado pero bomba pendiente de baterías.",
+    status: "pending",
+    statusText: "Pendiente — Bomba por conectar"
+  },
+  led: {
+    name: "LED Indicador",
+    tag: "INDICADOR VISUAL DE RIEGO",
+    icon: "💡",
+    color: 0xff3366,
+    emissive: 0x550011,
+    specs: [
+      { label: "Pin", value: "GPIO 2 (OUTPUT)" },
+      { label: "Resistencia", value: "220 Ω en serie" },
+      { label: "Estado ON", value: "Riego activo" },
+      { label: "Estado OFF", value: "Sistema en reposo" },
+    ],
+    description: "Indicador visual que se enciende durante cada ciclo de riego activo y se apaga cuando el sistema detecta que no es necesario regar. Permite monitoreo visual sin necesidad de monitor serial.",
+    status: "active",
+    statusText: "Funcionando"
+  },
+  battery: {
+    name: "Caja de Pilas 4×AA",
+    tag: "FUENTE DE ALIMENTACIÓN — BOMBA",
+    icon: "🔋",
+    color: 0xffea00,
+    emissive: 0x443300,
+    specs: [
+      { label: "Voltaje", value: "6V (4×1.5V)" },
+      { label: "Capacidad", value: "~2000 mAh" },
+      { label: "Destino", value: "Bomba de agua" },
+      { label: "GND", value: "Compartido con ESP32" },
+    ],
+    description: "Fuente de potencia independiente para la bomba de agua. El cable negro (GND) va a la línea GND común del protoboard. El cable rojo (+) va al tornillo COM del relé. El ESP32 no debe recibir la corriente de potencia del motor.",
+    status: "pending",
+    statusText: "Pendiente de conexión"
+  },
+  pump: {
+    name: "Bomba de Agua",
+    tag: "ACTUADOR HIDRÁULICO",
+    icon: "💧",
+    color: 0xff9100,
+    emissive: 0x442200,
+    specs: [
+      { label: "Alimentación", value: "6V DC (Batería)" },
+      { label: "Control", value: "Relé GPIO 26" },
+      { label: "Tiempo máx.", value: "20 segundos/ciclo" },
+      { label: "Deadband", value: ">1 min para activar" },
+    ],
+    description: "Bomba de agua controlada a través del módulo relé. Se activa cuando el modelo neuronal predice > 1 minuto de riego. Tiene un límite de seguridad de 20 segundos por ciclo para evitar encharcamiento. Conexión pendiente.",
+    status: "pending",
+    statusText: "Pendiente de conexión"
+  },
+  protoboard: {
+    name: "Protoboard",
+    tag: "PLATAFORMA DE CONEXIÓN",
+    icon: "🔧",
+    color: 0x9d4edd,
+    emissive: 0x220033,
+    specs: [
+      { label: "GND Común", value: "Línea Negra" },
+      { label: "VCC Común", value: "Línea Roja (3.3V)" },
+      { label: "Función", value: "Tierra compartida" },
+      { label: "Req.", value: "GND obligatorio" },
+    ],
+    description: "Base de prototipado. La línea negra actúa como GND común para TODOS los componentes: ESP32, FC-28, DHT22, relé, LED, cátodo del LED y cable negro de las pilas. La tierra común es obligatoria para el correcto funcionamiento.",
+    status: "active",
+    statusText: "En uso"
+  },
+};
+
+// ===================== SCENE SETUP =====================
+const scene = new THREE.Scene();
+// Color de fondo más elegante y profundo
+scene.background = new THREE.Color(0x030712); 
+scene.fog = new THREE.FogExp2(0x030712, 0.025);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
+// Ángulo isométrico inicial mejorado
+camera.position.set(-15, 12, 20); 
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// Sombras mejoradas
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+// ===================== CONTROLES PROFESIONALES (OrbitControls) =====================
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; // Inercia suave
+controls.dampingFactor = 0.05;
+controls.maxPolarAngle = Math.PI / 2 - 0.05; // No permitir ver desde abajo del suelo
+controls.minDistance = 8;
+controls.maxDistance = 40;
+controls.target.set(0, 0, 0);
+
+// ===================== LUCES (Cinemáticas) =====================
+const ambientLight = new THREE.AmbientLight(0x1a2b4c, 1.2);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+dirLight.position.set(10, 20, 15);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.width = 2048;
+dirLight.shadow.mapSize.height = 2048;
+dirLight.shadow.camera.near = 0.5;
+dirLight.shadow.camera.far = 50;
+dirLight.shadow.bias = -0.001;
+scene.add(dirLight);
+
+const greenLight = new THREE.PointLight(0x00ffa3, 2.5, 25);
+greenLight.position.set(-8, 6, 2);
+scene.add(greenLight);
+
+const blueLight = new THREE.PointLight(0x00b8ff, 2.5, 25);
+blueLight.position.set(8, 6, -2);
+scene.add(blueLight);
+
+// ===================== PISO Y CUADRÍCULA =====================
+// Piso sutil para recibir sombras
+const floorGeo = new THREE.PlaneGeometry(100, 100);
+const floorMat = new THREE.MeshStandardMaterial({ 
+  color: 0x030712, 
+  roughness: 0.1, 
+  metalness: 0.5 
+});
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -1.5;
+floor.receiveShadow = true;
+scene.add(floor);
+
+const gridHelper = new THREE.GridHelper(50, 50, 0x00ffa3, 0x1a2b4c);
+gridHelper.position.y = -1.49;
+gridHelper.material.opacity = 0.15;
+gridHelper.material.transparent = true;
+scene.add(gridHelper);
+
+// ===================== BUILD COMPONENTS =====================
+const clickableObjects = [];
+const componentMeshes = {};
+
+// Usamos MeshPhysicalMaterial para acabados realistas y premium
+function getPremiumMaterial(colorHex, emissiveHex) {
+  return new THREE.MeshPhysicalMaterial({
+    color: colorHex,
+    emissive: emissiveHex,
+    emissiveIntensity: 0.4,
+    metalness: 0.7,
+    roughness: 0.2,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.1,
+  });
+}
+
+function createBox(w, h, d, color, emissive, x, y, z, key) {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  const mat = getPremiumMaterial(color, emissive);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, y, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.userData.componentKey = key;
+  
+  // Añadir bordes redondeados visuales simulados con un wireframe sutil
+  const edges = new THREE.EdgesGeometry(geo);
+  const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.15 });
+  const line = new THREE.LineSegments(edges, lineMat);
+  mesh.add(line);
+
+  scene.add(mesh);
+  clickableObjects.push(mesh);
+  componentMeshes[key] = mesh;
+  return mesh;
+}
+
+// ---- PROTOBOARD ----
+createBox(15, 0.4, 8, 0x3a1a5c, 0x1a0a2e, 0, -0.5, 0, 'protoboard');
+
+// ---- ESP32 ----
+const esp = createBox(3.8, 0.5, 2.2, 0x0044aa, 0x001144, -3.5, 0.15, 0, 'esp32');
+const chipGeo = new THREE.BoxGeometry(1.6, 0.2, 1.2);
+const chipMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8, metalness: 0.2 });
+const chip = new THREE.Mesh(chipGeo, chipMat);
+chip.position.set(0, 0.35, 0);
+chip.castShadow = true;
+esp.add(chip);
+
+// LED on ESP32
+const ledGeo = new THREE.SphereGeometry(0.12, 16, 16);
+const ledMat = new THREE.MeshStandardMaterial({ color: 0xff2200, emissive: 0xff2200, emissiveIntensity: 2 });
+const ledMesh = new THREE.Mesh(ledGeo, ledMat);
+ledMesh.position.set(1.5, 0.35, 0.6);
+esp.add(ledMesh);
+
+// ---- FC-28 SENSOR ----
+const fc28 = createBox(1.4, 0.35, 2.0, 0x00aa55, 0x002211, 2.5, 0.1, -2.0, 'fc28');
+for (let i = -1; i <= 1; i += 2) {
+  const prongGeo = new THREE.CylinderGeometry(0.05, 0.02, 1.5, 12);
+  const prongMat = new THREE.MeshStandardMaterial({ color: 0xffcc00, metalness: 1, roughness: 0.2 });
+  const prong = new THREE.Mesh(prongGeo, prongMat);
+  prong.position.set(i * 0.4, -0.8, 0);
+  prong.castShadow = true;
+  fc28.add(prong);
+}
+
+// ---- DHT22 ----
+const dht = createBox(1.2, 0.7, 0.9, 0x00cc66, 0x002211, 4.5, 0.1, -2.0, 'dht22');
+const meshGeo = new THREE.BoxGeometry(0.8, 0.2, 0.6);
+const meshMat = new THREE.MeshStandardMaterial({ color: 0x004422, roughness: 0.9 });
+const meshDeco = new THREE.Mesh(meshGeo, meshMat);
+meshDeco.position.set(0, 0.45, 0);
+dht.add(meshDeco);
+
+// ---- RELAY ----
+const relay = createBox(2.4, 0.7, 1.6, 0xcc5500, 0x331100, 1.5, 0.2, 2.0, 'relay');
+const coilGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.6, 24);
+const coilMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.7, metalness: 0.5 });
+const coil = new THREE.Mesh(coilGeo, coilMat);
+coil.position.set(-0.6, 0.6, 0);
+coil.castShadow = true;
+relay.add(coil);
+
+// ---- LED INDICATOR ----
+const ledIndicator = createBox(0.5, 0.4, 0.5, 0xcc1133, 0x440011, -1.0, 0.05, 2.5, 'led');
+const ledDomeGeo = new THREE.SphereGeometry(0.25, 16, 16);
+const ledDomeMat = new THREE.MeshPhysicalMaterial({ 
+  color: 0xff0033, emissive: 0xff0033, emissiveIntensity: 1.5, 
+  transmission: 0.9, opacity: 1, transparent: true, roughness: 0.1 
+});
+const ledDome = new THREE.Mesh(ledDomeGeo, ledDomeMat);
+ledDome.position.set(0, 0.35, 0);
+ledIndicator.add(ledDome);
+
+// ---- BATTERY ----
+const battery = createBox(2.8, 0.9, 1.4, 0xccaa00, 0x332200, -4.5, 0.15, 2.8, 'battery');
+for (let i = 0; i < 4; i++) {
+  const cellGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.7, 24);
+  const cellMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8, roughness: 0.4 });
+  const cell = new THREE.Mesh(cellGeo, cellMat);
+  cell.rotation.z = Math.PI / 2;
+  cell.position.set(-1.05 + i * 0.7, 0.2, 0);
+  cell.castShadow = true;
+  battery.add(cell);
+}
+
+// ---- PUMP ----
+const pump = createBox(2.0, 1.2, 2.0, 0xcc6600, 0x331500, 5.5, 0.3, 2.0, 'pump');
+const pumpMotorGeo = new THREE.CylinderGeometry(0.5, 0.5, 1.0, 24);
+const pumpMotorMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.9, roughness: 0.3 });
+const pumpMotor = new THREE.Mesh(pumpMotorGeo, pumpMotorMat);
+pumpMotor.position.set(0, 1.1, 0);
+pumpMotor.castShadow = true;
+pump.add(pumpMotor);
+
+// ---- LABELS (Renderizado HTML en Canvas mejorado) ----
+function makeLabel(text, colorHexStr, x, y, z) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 300; canvas.height = 80;
+  const ctx = canvas.getContext('2d');
+  
+  // Fondo glass
+  ctx.fillStyle = 'rgba(10, 15, 26, 0.8)';
+  ctx.beginPath();
+  ctx.roundRect(10, 10, 280, 60, 12);
+  ctx.fill();
+  
+  // Borde glow
+  ctx.strokeStyle = colorHexStr;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  
+  // Texto
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 28px "Exo 2", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = colorHexStr;
+  ctx.shadowBlur = 10;
+  ctx.fillText(text, 150, 40);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  
+  const geo = new THREE.PlaneGeometry(2.8, 0.75);
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, y, z);
+  scene.add(mesh);
+  return mesh;
+}
+
+const labels = [];
+labels.push(makeLabel('ESP32', '#00b8ff', -3.5, 1.8, 0));
+labels.push(makeLabel('FC-28', '#00ffa3', 2.5, 1.8, -2.0));
+labels.push(makeLabel('DHT22', '#00ffa3', 4.5, 1.8, -2.0));
+labels.push(makeLabel('Relé', '#ff9100', 1.5, 1.8, 2.0));
+labels.push(makeLabel('LED', '#ff3366', -1.0, 1.6, 2.5));
+labels.push(makeLabel('Pilas 6V', '#ffea00', -4.5, 1.8, 2.8));
+labels.push(makeLabel('Bomba', '#ff9100', 5.5, 2.2, 2.0));
+
+// ---- WIRES (Como fibra óptica brillante) ----
+function addWire(x1, y1, z1, x2, y2, z2, colorHex) {
+  const points = [];
+  const steps = 30;
+  const dist = Math.sqrt((x2-x1)**2 + (z2-z1)**2);
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const x = x1 + (x2 - x1) * t;
+    const z = z1 + (z2 - z1) * t;
+    // Arco parabólico suave
+    const arc = Math.sin(t * Math.PI) * (dist * 0.15); 
+    points.push(new THREE.Vector3(x, Math.max(y1, y2) + arc, z));
+  }
+  const curve = new THREE.CatmullRomCurve3(points);
+  const geo = new THREE.TubeGeometry(curve, 32, 0.04, 8, false);
+  const mat = new THREE.MeshStandardMaterial({ 
+    color: colorHex, 
+    emissive: colorHex, 
+    emissiveIntensity: 1.5,
+    roughness: 0.2,
+    metalness: 0.8
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  scene.add(mesh);
+}
+
+// Conexiones
+addWire(-2, 0.3, -0.3, 1.8, 0.3, -2.0, 0x00ffa3); // ESP a FC28
+addWire(-1.8, 0.3, -0.1, 3.9, 0.3, -2.0, 0x00ffa3); // ESP a DHT22
+addWire(-2, 0.3, 0.3, 0.3, 0.3, 2.0, 0xff9100); // ESP a Relé
+addWire(-3.5, 0.3, 1.0, -1.3, 0.3, 2.5, 0xff3366); // ESP a LED
+addWire(2.7, 0.3, 2.0, 4.5, 0.3, 2.0, 0xffea00); // Relé a Bomba
+addWire(-3.1, 0.3, 2.8, 0.3, 0.3, 2.5, 0xffea00); // Batería a Relé
+addWire(-3.5, -0.1, 1.0, -3.5, -0.1, 2.0, 0x222222); // GND (Cables negros)
+addWire(3.5, -0.1, -1.5, 3.5, -0.1, 0.5, 0x222222);
+
+// PARTICLE FIELD (Ambiente Tech)
+const particleCount = 400;
+const positions = new Float32Array(particleCount * 3);
+for (let i = 0; i < particleCount; i++) {
+  positions[i * 3] = (Math.random() - 0.5) * 80;
+  positions[i * 3 + 1] = Math.random() * 40;
+  positions[i * 3 + 2] = (Math.random() - 0.5) * 80;
+}
+const particleGeo = new THREE.BufferGeometry();
+particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+// Partículas brillantes
+const particleMat = new THREE.PointsMaterial({ 
+  color: 0x00b8ff, 
+  size: 0.15, 
+  transparent: true, 
+  opacity: 0.6,
+  blending: THREE.AdditiveBlending 
+});
+const particles = new THREE.Points(particleGeo, particleMat);
+scene.add(particles);
+
+// ===================== INTERACTION =====================
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let selectedKey = null;
+let hoveredKey = null;
+const tooltip = document.getElementById('tooltip');
+
+// Usamos eventos 'pointer' para soportar mouse, touch, trackpads y stylus sin problemas
+let pointerDownPos = { x: 0, y: 0 };
+
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  pointerDownPos.x = e.clientX;
+  pointerDownPos.y = e.clientY;
+});
+
+renderer.domElement.addEventListener('pointermove', (e) => {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(clickableObjects, true);
+  
+  if (intersects.length > 0) {
+    let obj = intersects[0].object;
+    while (!obj.userData.componentKey && obj.parent) obj = obj.parent;
+    const key = obj.userData.componentKey;
+    
+    if (key && key !== hoveredKey) {
+      hoveredKey = key;
+      renderer.domElement.style.cursor = 'pointer';
+      tooltip.textContent = COMPONENTS[key]?.name || key;
+      tooltip.classList.add('visible');
+    }
+  } else {
+    hoveredKey = null;
+    renderer.domElement.style.cursor = 'default';
+    tooltip.classList.remove('visible');
+  }
+  
+  // Posicionar tooltip
+  tooltip.style.left = (e.clientX + 20) + 'px';
+  tooltip.style.top = (e.clientY - 20) + 'px';
+});
+
+renderer.domElement.addEventListener('pointerup', (e) => {
+  // Calcular distancia para saber si arrastró la cámara (OrbitControls) o solo hizo clic
+  const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+  if (dist > 15) return; // Si movió más de 15px, fue un arrastre de cámara. Cancelamos el clic.
+
+  // Actualizar coordenadas del puntero en el instante exacto del clic
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(clickableObjects, true);
+
+  if (intersects.length > 0) {
+    let obj = intersects[0].object;
+    while (!obj.userData.componentKey && obj.parent) obj = obj.parent;
+    const key = obj.userData.componentKey;
+    
+    if (key) {
+      showPanel(key);
+    }
+  } else {
+    // Si hace clic en el vacío oscuro, cerramos el panel
+    closePanel();
+  }
+});
+
+function showPanel(key) {
+  const data = COMPONENTS[key];
+  if (!data) return;
+  selectedKey = key;
+  
+  document.getElementById('panel-icon').textContent = data.icon;
+  document.getElementById('panel-name').textContent = data.name;
+  document.getElementById('panel-tag').textContent = data.tag;
+  document.getElementById('panel-desc').textContent = data.description;
+
+  const specsHTML = data.specs.map(s => `
+    <div class="spec-item">
+      <div class="spec-label">${s.label}</div>
+      <div class="spec-value">${s.value}</div>
+    </div>`).join('');
+  document.getElementById('panel-specs').innerHTML = specsHTML;
+
+  const statusMap = {
+    active: ['active', 'Operativo'],
+    pending: ['pending', 'Pendiente'],
+    planned: ['planned', 'Planificado']
+  };
+  const [cls, txt] = statusMap[data.status] || ['active', data.statusText];
+  document.getElementById('panel-status').innerHTML = `
+    <div class="status-badge ${cls}">
+      <div class="status-dot"></div>${data.statusText || txt}
+    </div>`;
+
+  document.getElementById('info-panel').classList.add('visible');
+}
+
+function closePanel() {
+  document.getElementById('info-panel').classList.remove('visible');
+  selectedKey = null;
+}
+
+// ===================== ANIMATION LOOP =====================
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  
+  const delta = clock.getDelta();
+  const elapsedTime = clock.getElapsedTime();
+
+  // Actualizar inercia de OrbitControls
+  controls.update();
+
+  // Animaciones de Hover / Selección (Escala suave)
+  clickableObjects.forEach(obj => {
+    if (!obj.userData.componentKey) return;
+    const key = obj.userData.componentKey;
+    const isHovered = key === hoveredKey;
+    const isSelected = key === selectedKey;
+    const targetScale = isSelected ? 1.15 : isHovered ? 1.08 : 1.0;
+    obj.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
+    
+    // Si está seleccionado, aumentar un poco el emisivo para destacar
+    if (obj.material && obj.material.emissiveIntensity !== undefined) {
+      const baseIntensity = key === 'led' ? 1.5 : 0.4;
+      const targetIntensity = isSelected ? baseIntensity + 0.5 : baseIntensity;
+      obj.material.emissiveIntensity += (targetIntensity - obj.material.emissiveIntensity) * 0.1;
+    }
+  });
+
+  // Efecto latido en LED
+  if (componentMeshes.led) {
+    const ledDome = componentMeshes.led.children[0];
+    if (ledDome) {
+      ledDome.material.emissiveIntensity = 1.5 + Math.sin(elapsedTime * 4) * 0.8;
+    }
+  }
+
+  // Flotación suave de componentes pendientes
+  if (componentMeshes.pump) {
+    componentMeshes.pump.position.y = 0.3 + Math.sin(elapsedTime * 2) * 0.1;
+  }
+  if (componentMeshes.battery) {
+    componentMeshes.battery.position.y = 0.15 + Math.sin(elapsedTime * 1.5 + 1) * 0.05;
+  }
+
+  // Movimiento sutil de luces para dar dinamismo
+  greenLight.position.x = -8 + Math.sin(elapsedTime * 0.5) * 2;
+  blueLight.position.x = 8 + Math.cos(elapsedTime * 0.5) * 2;
+
+  // Rotar lentamente el campo de partículas
+  particles.rotation.y = elapsedTime * 0.02;
+
+  // Las etiquetas siempre miran a la cámara
+  labels.forEach(l => l.lookAt(camera.position));
+
+  renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Ocultar pantalla de carga cinematográfica
+setTimeout(() => {
+  const loader = document.getElementById('loading');
+  loader.style.opacity = '0';
+  setTimeout(() => loader.style.display = 'none', 1000);
+}, 1500);
+
+animate();
+</script>
+</body>
+</html>
