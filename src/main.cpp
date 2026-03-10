@@ -6,13 +6,10 @@
 #include "DataLogger.h"
 #include "SystemHealth.h"
 
-// --- Definición de Pines de Hardware ---
 #define PIN_DHT 15
 #define PIN_SUELO 34
 #define PIN_RELE 26
-#define PIN_LED 2
 
-// --- Inyección de Dependencias (Instanciación) ---
 SensorManager sensores(PIN_SUELO, PIN_DHT);
 PumpController bomba(PIN_RELE);
 IrrigationBrain cerebro;
@@ -20,56 +17,42 @@ DataLogger logger;
 SystemHealth monitor;
 
 void setup() {
-    Serial.begin(115200);
-    // Esperar un momento a que el serial estabilice
-    delay(1000);
-    Serial.println("\n>>> INICIANDO SISTEMA DE RIEGO IOT (SPRINT 1) <<<");
+    pinMode(PIN_RELE, OUTPUT);
+    digitalWrite(PIN_RELE, LOW);
 
-    // Inicializar submódulos
+    Serial.begin(115200);
+    delay(1000);
+    Serial.println("\n>>> INICIANDO ECORIEGO AI <<<");
+
     sensores.init();
     bomba.init();
     logger.init();
+    cerebro.init();
 
-    // --- ESTA LÍNEA ES CRÍTICA ---
-    cerebro.init(); 
-    // -----------------------------
-
-    Serial.println(">>> Sistema listo y esperando ciclo...");
-
-    pinMode(PIN_LED, OUTPUT);
-    digitalWrite(PIN_LED, LOW);
+    Serial.println(">>> Sistema listo.");
 }
 
 void loop() {
-    // 1. Verificar Salud del Sistema
     if (!monitor.verificarSensores()) {
-        Serial.println("ERROR CRÍTICO: Fallo en sensores. Reintentando...");
+        Serial.println("ERROR: Fallo en sensores. Reintentando...");
         delay(5000);
         return;
     }
 
-    // 2. Adquisición de Datos (Capa Hardware)
     ContextoAmbiental ctx = sensores.leerSensores();
-
-    // 3. Inferencia / Decisión (Capa Lógica)
     ctx.tiempoRiegoCalculado = cerebro.calcularRiego(ctx);
+    logger.guardarLectura(ctx);
 
-    // 4. Persistencia y Telemetría (Capa Datos)
-    // Esto imprime la línea CSV en el monitor serial
-    logger.guardarLectura(ctx); 
-
-    // 5. Actuación (Capa Hardware)
     if (ctx.tiempoRiegoCalculado > 1.0) {
-    digitalWrite(PIN_LED, HIGH);  // LED enciende
-    bomba.activar(ctx.tiempoRiegoCalculado);
-    digitalWrite(PIN_LED, LOW);   // LED apaga
-    Serial.println(" -> Ciclo de riego finalizado.");
+        Serial.print(" -> REGANDO ");
+        Serial.print(ctx.tiempoRiegoCalculado);
+        Serial.println(" seg — Rele ACTIVADO");
+        bomba.activar(ctx.tiempoRiegoCalculado);
+        Serial.println(" -> Riego finalizado. Rele APAGADO");
+        delay(3000);
     } else {
-    digitalWrite(PIN_LED, LOW);
+        Serial.println(" -> Sin riego. Rele APAGADO");
     }
 
-    // 6. Espera (Intervalo de Muestreo)
-    // Para recolección de datos acelerada, usamos 2 segundos.
-    // En producción real, esto sería deepSleep de 30 minutos.
-    delay(2000); 
+    delay(2000);
 }

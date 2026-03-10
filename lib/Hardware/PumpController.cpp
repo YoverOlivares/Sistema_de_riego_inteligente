@@ -6,7 +6,7 @@ PumpController::PumpController(int pin) {
 
 void PumpController::init() {
     pinMode(pinRele, OUTPUT);
-    digitalWrite(pinRele, LOW); // Asegurar apagado al inicio
+    digitalWrite(pinRele, LOW);
 }
 
 void PumpController::activar(float segundos) {
@@ -16,7 +16,7 @@ void PumpController::activar(float segundos) {
     Serial.print(segundos);
     Serial.println(" segundos...");
 
-    digitalWrite(pinRele, HIGH); // Encender bomba
-    delay(segundos * 1000);      // Esperar (Bloqueante por ahora)
-    digitalWrite(pinRele, LOW);  // Apagar bomba
+    digitalWrite(pinRele, HIGH);
+    delay(segundos * 1000);
+    digitalWrite(pinRele, LOW);
 }
